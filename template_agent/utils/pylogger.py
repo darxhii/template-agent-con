@@ -1,8 +1,10 @@
-"""Logger utility for the Template MCP server."""
+"""Structured logger utility for the Template MCP server."""
 
 import logging
 import sys
 from typing import Any, Dict, List, Set
+
+import structlog
 
 # HTTP clients
 HTTP_CLIENT_LOGGERS = {
@@ -59,11 +61,6 @@ OBSERVABILITY_LOGGERS = {
     "langfuse.callback",
 }
 
-# Known-noisy loggers that should be fully silenced (CRITICAL only)
-SILENT_LOGGERS = {
-    "opentelemetry.context",
-}
-
 # --- Aggregated Sets ---
 
 THIRD_PARTY_LOGGERS: Set[str] = (
@@ -72,7 +69,6 @@ THIRD_PARTY_LOGGERS: Set[str] = (
     | MCP_LOGGERS
     | ML_AI_LOGGERS
     | OBSERVABILITY_LOGGERS
-    | SILENT_LOGGERS
 )
 
 ERROR_ONLY_LOGGERS: Set[str] = ML_AI_LOGGERS | OBSERVABILITY_LOGGERS
@@ -91,17 +87,12 @@ def _clear_handlers(logger: logging.Logger) -> None:
 def _setup_logger(logger_name: str, level: str) -> None:
     logger = logging.getLogger(logger_name)
     _clear_handlers(logger)
-    if logger_name in SILENT_LOGGERS:
-        logger.setLevel(logging.CRITICAL)
-    elif logger_name in ERROR_ONLY_LOGGERS:
-        logger.setLevel(logging.ERROR)
-    else:
-        logger.setLevel(level)
+    logger.setLevel(logging.ERROR if logger_name in ERROR_ONLY_LOGGERS else level)
     logger.propagate = True
 
 
 def _configure_third_party_loggers(log_level: str) -> None:
-    """Quieten selected third-party loggers."""
+    """Apply structured logging to selected third-party loggers."""
     logging.getLogger().handlers.clear()
 
     for name in THIRD_PARTY_LOGGERS:
@@ -118,31 +109,55 @@ def force_reconfigure_all_loggers(log_level: str = "INFO") -> None:
     get_python_logger(log_level)
 
 
-def get_python_logger(log_level: str = "INFO") -> logging.Logger:
-    """Get a configured stdlib logger."""
+def get_python_logger(log_level: str = "INFO") -> structlog.BoundLogger:
+    """Get a configured structlog logger."""
     global _LOGGING_CONFIGURED
     log_level = log_level.upper()
 
     if not _LOGGING_CONFIGURED:
         logging.basicConfig(
-            format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-            datefmt="%Y-%m-%dT%H:%M:%S",
+            format="%(message)s",
             stream=sys.stdout,
             level=log_level,
-            force=True,
         )
+
+        structlog.configure(
+            processors=[
+                structlog.stdlib.filter_by_level,
+                structlog.stdlib.add_logger_name,
+                structlog.stdlib.add_log_level,
+                structlog.stdlib.PositionalArgumentsFormatter(),
+                structlog.processors.TimeStamper(fmt="iso"),
+                structlog.processors.StackInfoRenderer(),
+                structlog.processors.format_exc_info,
+                structlog.processors.UnicodeDecoder(),
+                structlog.processors.JSONRenderer(),
+            ],
+            context_class=dict,
+            logger_factory=structlog.stdlib.LoggerFactory(),
+            wrapper_class=structlog.stdlib.BoundLogger,
+            cache_logger_on_first_use=True,
+        )
+
         _LOGGING_CONFIGURED = True
 
     _configure_third_party_loggers(log_level)
-    return logging.getLogger("template_agent")
+    return structlog.get_logger()
 
 
 def get_uvicorn_log_config(log_level: str = "INFO") -> Dict[str, Any]:
-    """Return a Uvicorn-compatible logging config."""
+    """Return a Uvicorn-compatible logging config that integrates with structlog."""
     log_level = log_level.upper()
     default_formatter = {
-        "format": "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        "datefmt": "%Y-%m-%dT%H:%M:%S",
+        "()": "structlog.stdlib.ProcessorFormatter",
+        "processor": structlog.processors.JSONRenderer(),
+        "foreign_pre_chain": [
+            structlog.stdlib.add_log_level,
+            structlog.processors.TimeStamper(fmt="iso"),
+            structlog.processors.StackInfoRenderer(),
+            structlog.processors.format_exc_info,
+            structlog.processors.UnicodeDecoder(),
+        ],
     }
 
     def make_logger_config(names: List[str], level: str) -> Dict[str, Any]:
@@ -155,7 +170,10 @@ def get_uvicorn_log_config(log_level: str = "INFO") -> Dict[str, Any]:
             for name in names
         }
 
-    base_loggers = ["", "uvicorn", "uvicorn.error", "uvicorn.asgi", "uvicorn.protocols"]
+    # Passthrough formatter for structlog-originated messages (already rendered)
+    passthrough_formatter = {"format": "%(message)s"}
+
+    uvicorn_loggers = ["uvicorn", "uvicorn.error", "uvicorn.asgi", "uvicorn.protocols"]
     access_loggers = ["uvicorn.access"]
 
     return {
@@ -164,6 +182,7 @@ def get_uvicorn_log_config(log_level: str = "INFO") -> Dict[str, Any]:
         "formatters": {
             "default": default_formatter,
             "access": default_formatter,
+            "passthrough": passthrough_formatter,
         },
         "handlers": {
             "default": {
@@ -176,14 +195,23 @@ def get_uvicorn_log_config(log_level: str = "INFO") -> Dict[str, Any]:
                 "class": "logging.StreamHandler",
                 "stream": "ext://sys.stdout",
             },
+            "passthrough": {
+                "formatter": "passthrough",
+                "class": "logging.StreamHandler",
+                "stream": "ext://sys.stdout",
+            },
         },
         "loggers": {
-            **make_logger_config(base_loggers, log_level),
+            "": {
+                "handlers": ["passthrough"],
+                "level": log_level,
+                "propagate": False,
+            },
+            **make_logger_config(uvicorn_loggers, log_level),
             **make_logger_config(access_loggers, log_level),
             **make_logger_config(
                 list(THIRD_PARTY_LOGGERS - ERROR_ONLY_LOGGERS), log_level
             ),
             **make_logger_config(list(ERROR_ONLY_LOGGERS), "ERROR"),
-            **make_logger_config(list(SILENT_LOGGERS), "CRITICAL"),
         },
     }
