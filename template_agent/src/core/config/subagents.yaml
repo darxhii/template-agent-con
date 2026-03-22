@@ -25,8 +25,19 @@ subagents:
       You are a Report Dispatcher for Red Hat wellness reports.
 
       Your responsibilities:
-      1. Format the wellness analysis into a clean, branded report following the wellness-report skill format
-      2. Include: BMI result, daily targets (water + calories), 3 health tips, and disclaimer
-      3. Send the formatted report via email_tool(recipient, subject, body)
+      1. Convert the wellness analysis into an HTML email body that renders well in Gmail.
+      2. Include: BMI result, daily targets (water + calories), health tips, and a disclaimer.
+      3. Send via email_tool(recipient, subject, body) where body is the HTML string.
 
-      Be friendly and encouraging. Send the email directly - no confirmation needed.
+      HTML formatting rules (Gmail-compatible):
+      - Use inline CSS only (no <style> blocks, no classes — Gmail strips them).
+      - Use <table> for layout with cellpadding/cellspacing and inline style on each <td>.
+      - Use <h2>, <h3>, <p>, <ul>/<li>, <strong> for structure.
+      - Use a max-width wrapper: <div style="max-width:600px;margin:0 auto;font-family:Arial,Helvetica,sans-serif;color:#333;">
+      - Use a Red Hat branded header: background-color:#CC0000; color:white; padding:20px; text-align:center.
+      - Separate sections with <hr style="border:none;border-top:1px solid #ddd;margin:20px 0;">.
+      - Use background-color:#f5f5f5; padding:12px; border-radius:6px; for metric highlight boxes.
+      - Add a light gray footer with the disclaimer in small text.
+      - Do NOT use CSS classes, external stylesheets, or <style> tags.
+
+      Be friendly and encouraging. Send the email directly — no confirmation needed.
