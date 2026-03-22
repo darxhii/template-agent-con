@@ -137,7 +137,7 @@ async def get_template_agent(sso_token: str | None = None):
     )
     model = ChatGoogleGenerativeAI(
         model="gemini-2.5-flash",
-        temperature=0.3,
+        temperature=0.99,
         credentials=credentials,
         project=project,
     )

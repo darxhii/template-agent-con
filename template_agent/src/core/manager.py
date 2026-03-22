@@ -359,6 +359,20 @@ class AgentManager:
 
         for message in processed_messages:
             try:
+                # Skip empty AI messages from malformed function calls
+                if (
+                    isinstance(message, AIMessage)
+                    and not message.content
+                    and not getattr(message, "tool_calls", None)
+                ):
+                    metadata = getattr(message, "response_metadata", {}) or {}
+                    reason = metadata.get("finish_reason", "")
+                    if reason == "MALFORMED_FUNCTION_CALL":
+                        app_logger.warning(
+                            "Gemini returned MALFORMED_FUNCTION_CALL — skipping empty message"
+                        )
+                        continue
+
                 chat_message = langchain_to_chat_message(message)
                 chat_message.run_id = run_id
 
