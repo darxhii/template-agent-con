@@ -10,16 +10,11 @@ from collections.abc import AsyncGenerator
 from typing import Any, Dict
 from uuid import uuid4
 
-from langchain_core.messages import (
-    AIMessage,
-    AIMessageChunk,
-    HumanMessage,
-    ToolMessage,
-)
+from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
-from langfuse.callback import CallbackHandler
+from langfuse.langchain import CallbackHandler
 from langgraph.pregel import Pregel
-from langgraph.types import Command, Interrupt
+from langgraph.types import Command, Interrupt, Overwrite
 
 from template_agent.src.core.agent import get_template_agent
 from template_agent.src.core.agent_utils import (
@@ -31,11 +26,6 @@ from template_agent.src.core.storage import register_thread
 from template_agent.src.schema import StreamRequest
 from template_agent.src.settings import settings
 from template_agent.utils.pylogger import get_python_logger
-
-# Initialize Langfuse CallbackHandler for Langchain (tracing)
-langfuse_handler = CallbackHandler(
-    trace_name="template-agent", environment=settings.LANGFUSE_TRACING_ENVIRONMENT
-)
 
 app_logger = get_python_logger(settings.PYTHON_LOG_LEVEL)
 
@@ -56,7 +46,8 @@ class AgentManager:
         """
         self.redhat_sso_token = redhat_sso_token
         self._agent: Pregel | None = None
-        self._current_tool_call_id: str | None = None  # Track current active tool call
+        self._current_tool_call_id: str | None = None
+        self._seen_message_ids: set = set()
 
     async def stream_response(
         self, request: StreamRequest
@@ -78,7 +69,12 @@ class AgentManager:
             self.redhat_sso_token, enable_checkpointing=True
         ) as persistent_agent:
             try:
+                # Reset tracking for this stream
+                self._current_tool_call_id = None
+                self._seen_message_ids = set()
+
                 # Prepare input for the persistent agent
+                # (also pre-populates _seen_message_ids from existing checkpoint)
                 kwargs, run_id, thread_id = await self._handle_input(
                     request, persistent_agent
                 )
@@ -86,9 +82,6 @@ class AgentManager:
                 app_logger.info(
                     f"AgentManager streaming response for run_id: {run_id}, thread_id: {thread_id}"
                 )
-
-                # Reset tool call tracking for this stream
-                self._current_tool_call_id = None
 
                 # Use persistent agent for streaming - LangGraph will handle state automatically
                 async for stream_event in persistent_agent.astream(
@@ -123,7 +116,9 @@ class AgentManager:
                 )
 
             except Exception as e:
-                app_logger.error(f"Error in AgentManager stream_response: {e}")
+                app_logger.error(
+                    f"Error in AgentManager stream_response: {e}", exc_info=True
+                )
                 yield {
                     "type": "error",
                     "content": {
@@ -165,10 +160,9 @@ class AgentManager:
             "run_id": str(run_id),
             "user_id": effective_user_id,
             "ai_call_id": ai_call_id,
-            "langfuse_session_id": effective_session_id,
-            "langfuse_user_id": effective_user_id,
-            "langfuse_observation_id": thread_id,
         }
+
+        langfuse_handler = CallbackHandler()
 
         config = RunnableConfig(
             configurable=configurable,
@@ -178,6 +172,15 @@ class AgentManager:
 
         # Check for interrupts that need to be resumed (preserved from original)
         state = await agent.aget_state(config=config)
+
+        # Pre-populate seen message IDs from existing checkpoint so
+        # Overwrite updates don't replay the full conversation history
+        existing_messages = state.values.get("messages", [])
+        for msg in existing_messages:
+            msg_id = getattr(msg, "id", None)
+            if msg_id:
+                self._seen_message_ids.add(msg_id)
+
         interrupted_tasks = [
             task
             for task in state.tasks
@@ -224,10 +227,9 @@ class AgentManager:
             "session_id": effective_session_id,
             "run_id": run_id,
             "user_id": effective_user_id,
-            "langfuse_session_id": effective_session_id,
-            "langfuse_user_id": effective_user_id,
-            "langfuse_observation_id": thread_id,
         }
+
+        langfuse_handler = CallbackHandler()
 
         config = RunnableConfig(
             configurable=configurable,
@@ -316,7 +318,24 @@ class AgentManager:
                 continue
 
             updates = updates or {}
-            update_messages = updates.get("messages", [])
+            raw_messages = updates.get("messages", [])
+            is_overwrite = isinstance(raw_messages, Overwrite)
+            update_messages = raw_messages.value if is_overwrite else raw_messages
+
+            if is_overwrite:
+                # Overwrite contains the FULL message history; only keep unseen messages
+                unseen = []
+                for msg in update_messages:
+                    msg_id = getattr(msg, "id", None) or id(msg)
+                    if msg_id not in self._seen_message_ids:
+                        unseen.append(msg)
+                        self._seen_message_ids.add(msg_id)
+                update_messages = unseen
+            else:
+                # Regular update — track IDs so Overwrite can skip them later
+                for msg in update_messages:
+                    msg_id = getattr(msg, "id", None) or id(msg)
+                    self._seen_message_ids.add(msg_id)
 
             # Special cases for using langgraph-supervisor library (preserved)
             if node == "supervisor":
@@ -327,13 +346,13 @@ class AgentManager:
                     update_messages = [ai_messages[-1]]
 
             if node in ("research_expert", "math_expert"):
-                # Convert sub-agent output to ToolMessage for UI display (preserved)
-                msg = ToolMessage(
-                    content=update_messages[0].content,
-                    name=node,
-                    tool_call_id="",
-                )
-                update_messages = [msg]
+                if update_messages:
+                    msg = ToolMessage(
+                        content=update_messages[0].content,
+                        name=node,
+                        tool_call_id="",
+                    )
+                    update_messages = [msg]
 
             new_messages.extend(update_messages)
 

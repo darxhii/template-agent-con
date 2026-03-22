@@ -1,10 +1,8 @@
-"""Structured logger utility for the Template MCP server."""
+"""Logger utility for the Template MCP server."""
 
 import logging
 import sys
 from typing import Any, Dict, List, Set
-
-import structlog
 
 # HTTP clients
 HTTP_CLIENT_LOGGERS = {
@@ -92,7 +90,7 @@ def _setup_logger(logger_name: str, level: str) -> None:
 
 
 def _configure_third_party_loggers(log_level: str) -> None:
-    """Apply structured logging to selected third-party loggers."""
+    """Quieten selected third-party loggers."""
     logging.getLogger().handlers.clear()
 
     for name in THIRD_PARTY_LOGGERS:
@@ -109,55 +107,31 @@ def force_reconfigure_all_loggers(log_level: str = "INFO") -> None:
     get_python_logger(log_level)
 
 
-def get_python_logger(log_level: str = "INFO") -> structlog.BoundLogger:
-    """Get a configured structlog logger."""
+def get_python_logger(log_level: str = "INFO") -> logging.Logger:
+    """Get a configured stdlib logger."""
     global _LOGGING_CONFIGURED
     log_level = log_level.upper()
 
     if not _LOGGING_CONFIGURED:
         logging.basicConfig(
-            format="%(message)s",
+            format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+            datefmt="%Y-%m-%dT%H:%M:%S",
             stream=sys.stdout,
             level=log_level,
+            force=True,
         )
-
-        structlog.configure(
-            processors=[
-                structlog.stdlib.filter_by_level,
-                structlog.stdlib.add_logger_name,
-                structlog.stdlib.add_log_level,
-                structlog.stdlib.PositionalArgumentsFormatter(),
-                structlog.processors.TimeStamper(fmt="iso"),
-                structlog.processors.StackInfoRenderer(),
-                structlog.processors.format_exc_info,
-                structlog.processors.UnicodeDecoder(),
-                structlog.processors.JSONRenderer(),
-            ],
-            context_class=dict,
-            logger_factory=structlog.stdlib.LoggerFactory(),
-            wrapper_class=structlog.stdlib.BoundLogger,
-            cache_logger_on_first_use=True,
-        )
-
         _LOGGING_CONFIGURED = True
 
     _configure_third_party_loggers(log_level)
-    return structlog.get_logger()
+    return logging.getLogger("template_agent")
 
 
 def get_uvicorn_log_config(log_level: str = "INFO") -> Dict[str, Any]:
-    """Return a Uvicorn-compatible logging config that integrates with structlog."""
+    """Return a Uvicorn-compatible logging config."""
     log_level = log_level.upper()
     default_formatter = {
-        "()": "structlog.stdlib.ProcessorFormatter",
-        "processor": structlog.processors.JSONRenderer(),
-        "foreign_pre_chain": [
-            structlog.stdlib.add_log_level,
-            structlog.processors.TimeStamper(fmt="iso"),
-            structlog.processors.StackInfoRenderer(),
-            structlog.processors.format_exc_info,
-            structlog.processors.UnicodeDecoder(),
-        ],
+        "format": "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        "datefmt": "%Y-%m-%dT%H:%M:%S",
     }
 
     def make_logger_config(names: List[str], level: str) -> Dict[str, Any]:
@@ -170,7 +144,6 @@ def get_uvicorn_log_config(log_level: str = "INFO") -> Dict[str, Any]:
             for name in names
         }
 
-    # Base uvicorn loggers
     base_loggers = ["", "uvicorn", "uvicorn.error", "uvicorn.asgi", "uvicorn.protocols"]
     access_loggers = ["uvicorn.access"]
 

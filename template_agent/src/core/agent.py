@@ -1,24 +1,29 @@
 """Agent implementation for the template agent system.
 
-This module provides the core agent functionality for the template agent,
-including initialization, configuration, and agent creation utilities.
+This module provides the core agent functionality using the deepagents library,
+including initialization, configuration, and agent creation with MCP tools,
+skills, subagents, and memory.
 """
 
 from contextlib import asynccontextmanager
-from typing import Optional
+from pathlib import Path
 
+import yaml
+from deepagents import SubAgent, create_deep_agent
+from deepagents.backends import FilesystemBackend
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
-from langgraph.prebuilt import create_react_agent
 
 from template_agent.src.core.exceptions.exceptions import AppException, AppExceptionCode
-from template_agent.src.core.prompt import get_system_prompt
 from template_agent.src.core.storage import get_global_checkpoint
 from template_agent.src.settings import settings
 from template_agent.utils.pylogger import get_python_logger
 
 logger = get_python_logger(log_level=settings.PYTHON_LOG_LEVEL)
+
+# Repo root for loading memory, skills, and subagents
+REPO_ROOT = Path(__file__).parent.parent.parent.parent  # template-agent/
 
 
 async def initialize_database() -> None:
@@ -58,13 +63,13 @@ async def initialize_database() -> None:
 
 @asynccontextmanager
 async def get_template_agent(
-    sso_token: Optional[str] = None, enable_checkpointing: bool = True
+    sso_token: str | None = None, enable_checkpointing: bool = True
 ):
-    """Get a fully initialized template agent.
+    """Get a fully initialized deep agent with MCP tools, skills, subagents, and memory.
 
-    This function creates and configures a template agent with the necessary
-    tools, model, and database connections. It uses an async context manager
-    to ensure proper resource cleanup.
+    This function creates and configures a deep agent using the deepagents library
+    with the necessary tools from MCP, skills, subagents, and memory. It uses an
+    async context manager to ensure proper resource cleanup.
 
     Args:
         sso_token: Optional access token for authentication. If provided,
@@ -73,13 +78,13 @@ async def get_template_agent(
             Set to False for streaming-only operations that shouldn't save to DB.
 
     Yields:
-        The initialized template agent instance.
+        The initialized deep agent instance.
 
     Raises:
         Exception: If there are issues with database connections or agent setup.
     """
     # Initialize MCP client and get tools
-    tools = []
+    tools: list = []
 
     # Log MCP connection details for debugging
     logger.info(f"Attempting to connect to MCP server at {settings.MCP_SERVER_URL}")
@@ -94,7 +99,7 @@ async def get_template_agent(
         # Add timeout wrapper for MCP connection
         async def connect_with_timeout():
             # Configure MCP client with SSL verification setting
-            server_config = {
+            server_config: dict = {
                 "url": settings.MCP_SERVER_URL,
                 "transport": settings.MCP_TRANSPORT_PROTOCOL,
                 "headers": {"Authorization": f"Bearer {sso_token}"}
@@ -118,6 +123,7 @@ async def get_template_agent(
         logger.info(
             f"Successfully connected to MCP server and loaded {len(tools)} tools"
         )
+        logger.info(f"Available tools: {[tool.name for tool in tools]}")
     except asyncio.TimeoutError:
         # Handle timeout specifically
         error_msg = (
@@ -160,38 +166,91 @@ async def get_template_agent(
                 AppExceptionCode.PRODUCTION_MCP_CONNECTION_ERROR,
             )
 
-    # Initialize the language model
-    model = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.3)
+    # Initialize the language model with service account credentials
+    import google.auth
+
+    credentials, project = google.auth.default(
+        scopes=["https://www.googleapis.com/auth/cloud-platform"]
+    )
+    model = ChatGoogleGenerativeAI(
+        model="gemini-2.5-flash",
+        temperature=0.3,
+        credentials=credentials,
+        project=project,
+    )
+
+    # Load subagents from YAML
+    subagents_path = REPO_ROOT / "subagents.yaml"
+    logger.info(f"Loading subagents from {subagents_path}")
+
+    subagents_config: list[SubAgent] | None = None
+    if subagents_path.exists():
+        raw = yaml.safe_load(subagents_path.read_text())
+        entries = raw.get("subagents", []) if isinstance(raw, dict) else []
+        subagents_config = [
+            SubAgent(
+                name=e["name"],
+                description=e.get("description", ""),
+                system_prompt=e.get("instructions", ""),
+            )
+            for e in entries
+        ]
+        logger.info(f"Loaded {len(subagents_config)} subagents")
+    else:
+        logger.warning(f"Subagents file not found at {subagents_path}")
+
+    # Setup memory (AGENTS.md)
+    memory_files = []
+    agents_md_path = REPO_ROOT / "AGENTS.md"
+    if agents_md_path.exists():
+        memory_files.append(str(agents_md_path))
+        logger.info(f"Loaded memory from {agents_md_path}")
+    else:
+        logger.warning(f"AGENTS.md not found at {agents_md_path}")
+
+    # Setup skills directory
+    skills_dir = REPO_ROOT / "skills"
+    skills_path = [str(skills_dir)] if skills_dir.exists() else []
+    if skills_path:
+        logger.info(f"Loaded skills from {skills_dir}")
+    else:
+        logger.warning(f"Skills directory not found at {skills_dir}")
+
+    # Setup backend for deep agent
+    backend = FilesystemBackend(root_dir=str(REPO_ROOT))
 
     if not enable_checkpointing:
         # Create agent without checkpointing for streaming-only operations
         logger.info(
-            "Creating agent without checkpointing for streaming-only operations"
+            "Creating deep agent without checkpointing for streaming-only operations"
         )
-        agent_redhat = create_react_agent(
+        agent = create_deep_agent(
             model=model,
-            prompt=get_system_prompt(),
+            memory=memory_files,
+            skills=skills_path,
             tools=tools,
-            # No checkpointer or store - streaming only, no persistence
+            subagents=subagents_config,
+            backend=backend,
+            # No checkpointer - streaming only, no persistence
         )
-        logger.info("Template agent initialized successfully without checkpointing")
-        yield agent_redhat
+        logger.info("Deep agent initialized successfully without checkpointing")
+        yield agent
     elif settings.USE_INMEMORY_SAVER:
         # Use single global checkpoint for local development
         logger.info("Using single global checkpoint for local development")
-        # Use single checkpoint instance for both checkpointer and store
         checkpoint = get_global_checkpoint()
-        agent_redhat = create_react_agent(
+
+        agent = create_deep_agent(
             model=model,
-            prompt=get_system_prompt(),
+            memory=memory_files,
+            skills=skills_path,
             tools=tools,
+            subagents=subagents_config,
+            backend=backend,
             checkpointer=checkpoint,
-            store=checkpoint,
         )
-        logger.info(
-            "Template agent initialized successfully with single global checkpoint"
-        )
-        yield agent_redhat
+        logger.info("Deep agent initialized successfully with single global checkpoint")
+        yield agent
     else:
         # Use PostgreSQL storage for production
         logger.info("Using PostgreSQL checkpoint for production")
@@ -202,16 +261,18 @@ async def get_template_agent(
             if hasattr(checkpoint, "setup"):
                 await checkpoint.setup()
 
-            # Create the agent with single checkpoint instance for both checkpointer and store
-            agent_redhat = create_react_agent(
+            # Create the deep agent with PostgreSQL checkpointer
+            agent = create_deep_agent(
                 model=model,
-                prompt=get_system_prompt(),
+                memory=memory_files,
+                skills=skills_path,
                 tools=tools,
+                subagents=subagents_config,
+                backend=backend,
                 checkpointer=checkpoint,
-                store=checkpoint,
             )
 
             logger.info(
-                "Template agent initialized successfully with PostgreSQL checkpoint"
+                "Deep agent initialized successfully with PostgreSQL checkpoint"
             )
-            yield agent_redhat
+            yield agent

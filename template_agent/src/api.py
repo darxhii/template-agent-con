@@ -78,7 +78,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 
                 request = Request(request.scope, receive)
             except Exception as e:
-                logger.warning("Failed to read request body", error=str(e))
+                logger.warning(f"Failed to read request body: {e}")
 
         logger.info("incoming_request", **request_data)
 
