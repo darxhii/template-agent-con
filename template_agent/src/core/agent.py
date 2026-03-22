@@ -137,7 +137,7 @@ async def get_template_agent(sso_token: str | None = None):
     )
     model = ChatGoogleGenerativeAI(
         model="gemini-2.5-flash",
-        temperature=0.99,
+        temperature=0,
         credentials=credentials,
         project=project,
     )
@@ -147,6 +147,11 @@ async def get_template_agent(sso_token: str | None = None):
     logger.info(f"Loading subagents from {subagents_path}")
 
     tool_by_name = {t.name: t for t in tools}
+
+    # Skills base directory — each agent has its own subdirectory
+    skills_base = CONFIG_DIR / "skills"
+    main_skills_dir = skills_base / "main"
+    main_skills_path = [str(main_skills_dir)] if main_skills_dir.exists() else []
 
     subagents_config: list[SubAgent] | None = None
     if subagents_path.exists():
@@ -170,6 +175,16 @@ async def get_template_agent(sso_token: str | None = None):
                         f"Subagent '{entry['name']}' references unknown tools: {missing}"
                     )
                 sa["tools"] = resolved
+            sa_skills_name = entry.get("skills_dir")
+            if sa_skills_name:
+                sa_skills_dir = skills_base / sa_skills_name
+                if sa_skills_dir.exists():
+                    sa["skills"] = [str(sa_skills_dir)]
+                    logger.info(f"Subagent '{entry['name']}' skills: {sa_skills_dir}")
+                else:
+                    logger.warning(
+                        f"Subagent '{entry['name']}' skills_dir not found: {sa_skills_dir}"
+                    )
             subagents_config.append(sa)
         logger.info(f"Loaded {len(subagents_config)} subagents")
     else:
@@ -188,13 +203,10 @@ async def get_template_agent(sso_token: str | None = None):
     else:
         logger.warning(f"AGENTS.md not found at {agents_md_path}")
 
-    # Setup skills directory
-    skills_dir = CONFIG_DIR / "skills"
-    skills_path = [str(skills_dir)] if skills_dir.exists() else []
-    if skills_path:
-        logger.info(f"Loaded skills from {skills_dir}")
+    if main_skills_path:
+        logger.info(f"Main agent skills: {main_skills_dir}")
     else:
-        logger.warning(f"Skills directory not found at {skills_dir}")
+        logger.warning(f"Main agent skills directory not found: {main_skills_dir}")
 
     # Setup backend for deep agent
     backend = FilesystemBackend(root_dir=str(REPO_ROOT))
@@ -230,7 +242,7 @@ async def get_template_agent(sso_token: str | None = None):
             model=model,
             system_prompt=system_prompt,
             memory=memory_files,
-            skills=skills_path,
+            skills=main_skills_path,
             tools=main_agent_tools,
             subagents=subagents_config,
             backend=backend,

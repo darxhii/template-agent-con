@@ -61,6 +61,11 @@ OBSERVABILITY_LOGGERS = {
     "langfuse.callback",
 }
 
+# Known-noisy loggers silenced to CRITICAL
+SILENT_LOGGERS = {
+    "opentelemetry.context",
+}
+
 # --- Aggregated Sets ---
 
 THIRD_PARTY_LOGGERS: Set[str] = (
@@ -69,6 +74,7 @@ THIRD_PARTY_LOGGERS: Set[str] = (
     | MCP_LOGGERS
     | ML_AI_LOGGERS
     | OBSERVABILITY_LOGGERS
+    | SILENT_LOGGERS
 )
 
 ERROR_ONLY_LOGGERS: Set[str] = ML_AI_LOGGERS | OBSERVABILITY_LOGGERS
@@ -87,7 +93,12 @@ def _clear_handlers(logger: logging.Logger) -> None:
 def _setup_logger(logger_name: str, level: str) -> None:
     logger = logging.getLogger(logger_name)
     _clear_handlers(logger)
-    logger.setLevel(logging.ERROR if logger_name in ERROR_ONLY_LOGGERS else level)
+    if logger_name in SILENT_LOGGERS:
+        logger.setLevel(logging.CRITICAL)
+    elif logger_name in ERROR_ONLY_LOGGERS:
+        logger.setLevel(logging.ERROR)
+    else:
+        logger.setLevel(level)
     logger.propagate = True
 
 

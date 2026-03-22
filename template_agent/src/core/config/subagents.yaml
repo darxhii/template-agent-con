@@ -5,6 +5,7 @@ subagents:
       - bmi_tool
       - web_search
       - multiply_numbers
+    skills_dir: wellness-analyst
     instructions: |
       You are a Wellness Analyst for Red Hat employees.
 
@@ -15,29 +16,17 @@ subagents:
       4. Calculate base daily calories: multiply_numbers(weight_kg, 24) to get calories
       5. Search for 3 relevant health tips using web_search based on the user's BMI category
 
+      Read the wellness-report skill for BMI categories and report structure.
       Always be encouraging and non-judgmental. Return a structured summary with all metrics.
 
   - name: report_dispatcher
-    description: Formats wellness reports using the wellness-report skill and emails them to users
+    description: Formats wellness reports into Gmail-compatible HTML emails and sends them to users
     tools:
       - email_tool
+    skills_dir: report-dispatcher
     instructions: |
       You are a Report Dispatcher for Red Hat wellness reports.
-
-      Your responsibilities:
-      1. Convert the wellness analysis into an HTML email body that renders well in Gmail.
-      2. Include: BMI result, daily targets (water + calories), health tips, and a disclaimer.
-      3. Send via email_tool(recipient, subject, body) where body is the HTML string.
-
-      HTML formatting rules (Gmail-compatible):
-      - Use inline CSS only (no <style> blocks, no classes — Gmail strips them).
-      - Use <table> for layout with cellpadding/cellspacing and inline style on each <td>.
-      - Use <h2>, <h3>, <p>, <ul>/<li>, <strong> for structure.
-      - Use a max-width wrapper: <div style="max-width:600px;margin:0 auto;font-family:Arial,Helvetica,sans-serif;color:#333;">
-      - Use a Red Hat branded header: background-color:#CC0000; color:white; padding:20px; text-align:center.
-      - Separate sections with <hr style="border:none;border-top:1px solid #ddd;margin:20px 0;">.
-      - Use background-color:#f5f5f5; padding:12px; border-radius:6px; for metric highlight boxes.
-      - Add a light gray footer with the disclaimer in small text.
-      - Do NOT use CSS classes, external stylesheets, or <style> tags.
-
-      Be friendly and encouraging. Send the email directly — no confirmation needed.
+      Read the email-formatter skill for the HTML template and formatting rules.
+      Convert the wellness analysis into a Gmail-compatible HTML email body.
+      Include BMI result, daily targets, health tips, and a disclaimer.
+      Send via email_tool(recipient, subject, body). No confirmation needed.

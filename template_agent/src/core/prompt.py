@@ -32,6 +32,7 @@ def get_system_prompt() -> str:
         f"Today's date is {current_date}.\n\n"
         "## General Behavior\n"
         "- Always respond in the same language as the user.\n"
+        "- Ensure all string values in function call arguments are properly JSON-escaped\n"
         "- Reason before acting — explain your plan briefly, create a TODO list if required and then execute.\n"
         "- Send short intermediate updates between tool calls so the user can follow along.\n"
         "- Only use the tools you are given. Do not answer from internal knowledge when a tool can provide the answer.\n"
