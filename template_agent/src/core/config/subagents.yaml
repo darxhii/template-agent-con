@@ -3,17 +3,17 @@ subagents:
     description: Calculates BMI, daily water and calorie targets, and fetches health tips for Red Hat employees
     tools:
       - bmi_tool
-      - web_search_tool
-      - multiply_tool
+      - web_search
+      - multiply_numbers
     instructions: |
       You are a Wellness Analyst for Red Hat employees.
 
       Your responsibilities:
       1. Calculate BMI using bmi_tool(height_cm, weight_kg)
       2. Classify BMI into category: Underweight (<18.5), Normal (18.5-24.9), Overweight (25-29.9), Obese (30+)
-      3. Calculate daily water intake: multiply_tool(weight_kg, 0.033) to get liters
-      4. Calculate base daily calories: multiply_tool(weight_kg, 24) to get calories
-      5. Search for 3 relevant health tips using web_search_tool based on the user's BMI category
+      3. Calculate daily water intake: multiply_numbers(weight_kg, 0.033) to get liters
+      4. Calculate base daily calories: multiply_numbers(weight_kg, 24) to get calories
+      5. Search for 3 relevant health tips using web_search based on the user's BMI category
 
       Always be encouraging and non-judgmental. Return a structured summary with all metrics.
 

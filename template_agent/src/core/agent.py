@@ -16,55 +16,20 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
 from template_agent.src.core.exceptions.exceptions import AppException, AppExceptionCode
-from template_agent.src.core.storage import get_global_checkpoint
+from template_agent.src.core.prompt import get_system_prompt
+from template_agent.src.core.storage import get_global_checkpoint, get_global_store
 from template_agent.src.settings import settings
 from template_agent.utils.pylogger import get_python_logger
 
 logger = get_python_logger(log_level=settings.PYTHON_LOG_LEVEL)
 
-# Repo root for loading memory, skills, and subagents
+# Repo root and config directory for memory, skills, and subagents
 REPO_ROOT = Path(__file__).parent.parent.parent.parent  # template-agent/
-
-
-async def initialize_database() -> None:
-    """Initialize PostgreSQL database schema on application startup.
-
-    This function ensures the checkpoints table and related schema are created
-    before any requests are processed. Only runs when using PostgreSQL storage
-    (USE_INMEMORY_SAVER=False).
-
-    Raises:
-        AppException: If database connection or schema creation fails.
-    """
-    if settings.USE_INMEMORY_SAVER:
-        logger.info("Using in-memory storage - skipping database initialization")
-        return
-
-    try:
-        logger.info("Initializing PostgreSQL database schema")
-        async with AsyncPostgresSaver.from_conn_string(
-            settings.database_uri
-        ) as checkpoint:
-            # Setup database schema - creates checkpoints table and indexes
-            if hasattr(checkpoint, "setup"):
-                await checkpoint.setup()
-                logger.info("Database schema initialized successfully")
-            else:
-                logger.warning(
-                    "AsyncPostgresSaver does not have setup method - schema may need manual creation"
-                )
-    except Exception as e:
-        logger.error(f"Failed to initialize database schema: {e}", exc_info=True)
-        raise AppException(
-            f"Database initialization failed: {str(e)}",
-            AppExceptionCode.CONFIGURATION_INITIALIZATION_ERROR,
-        )
+CONFIG_DIR = Path(__file__).parent / "config"
 
 
 @asynccontextmanager
-async def get_template_agent(
-    sso_token: str | None = None, enable_checkpointing: bool = True
-):
+async def get_template_agent(sso_token: str | None = None):
     """Get a fully initialized deep agent with MCP tools, skills, subagents, and memory.
 
     This function creates and configures a deep agent using the deepagents library
@@ -74,8 +39,6 @@ async def get_template_agent(
     Args:
         sso_token: Optional access token for authentication. If provided,
             it will be used for authorization headers in MCP client requests.
-        enable_checkpointing: Whether to enable checkpointing/persistence.
-            Set to False for streaming-only operations that shouldn't save to DB.
 
     Yields:
         The initialized deep agent instance.
@@ -180,28 +143,45 @@ async def get_template_agent(
     )
 
     # Load subagents from YAML
-    subagents_path = REPO_ROOT / "subagents.yaml"
+    subagents_path = CONFIG_DIR / "subagents.yaml"
     logger.info(f"Loading subagents from {subagents_path}")
+
+    tool_by_name = {t.name: t for t in tools}
 
     subagents_config: list[SubAgent] | None = None
     if subagents_path.exists():
         raw = yaml.safe_load(subagents_path.read_text())
         entries = raw.get("subagents", []) if isinstance(raw, dict) else []
-        subagents_config = [
-            SubAgent(
-                name=e["name"],
-                description=e.get("description", ""),
-                system_prompt=e.get("instructions", ""),
+        subagents_config = []
+        for entry in entries:
+            sa: SubAgent = SubAgent(
+                name=entry["name"],
+                description=entry.get("description", ""),
+                system_prompt=entry.get("instructions", ""),
             )
-            for e in entries
-        ]
+            yaml_tool_names = entry.get("tools", [])
+            if yaml_tool_names:
+                resolved = [
+                    tool_by_name[n] for n in yaml_tool_names if n in tool_by_name
+                ]
+                missing = [n for n in yaml_tool_names if n not in tool_by_name]
+                if missing:
+                    logger.warning(
+                        f"Subagent '{entry['name']}' references unknown tools: {missing}"
+                    )
+                sa["tools"] = resolved
+            subagents_config.append(sa)
         logger.info(f"Loaded {len(subagents_config)} subagents")
     else:
         logger.warning(f"Subagents file not found at {subagents_path}")
 
+    # Load system prompt
+    system_prompt = get_system_prompt()
+    logger.info("Loaded system prompt from prompt.py")
+
     # Setup memory (AGENTS.md)
     memory_files = []
-    agents_md_path = REPO_ROOT / "AGENTS.md"
+    agents_md_path = CONFIG_DIR / "AGENTS.md"
     if agents_md_path.exists():
         memory_files.append(str(agents_md_path))
         logger.info(f"Loaded memory from {agents_md_path}")
@@ -209,7 +189,7 @@ async def get_template_agent(
         logger.warning(f"AGENTS.md not found at {agents_md_path}")
 
     # Setup skills directory
-    skills_dir = REPO_ROOT / "skills"
+    skills_dir = CONFIG_DIR / "skills"
     skills_path = [str(skills_dir)] if skills_dir.exists() else []
     if skills_path:
         logger.info(f"Loaded skills from {skills_dir}")
@@ -219,60 +199,46 @@ async def get_template_agent(
     # Setup backend for deep agent
     backend = FilesystemBackend(root_dir=str(REPO_ROOT))
 
-    if not enable_checkpointing:
-        # Create agent without checkpointing for streaming-only operations
+    # Resolve checkpointer and store
+    checkpointer = None
+    store = None
+    pg_ctx = None
+
+    if settings.USE_INMEMORY_SAVER:
+        checkpointer = get_global_checkpoint()
+        store = get_global_store()
         logger.info(
-            "Creating deep agent without checkpointing for streaming-only operations"
+            f"Using in-memory checkpoint={type(checkpointer).__name__} "
+            f"store={type(store).__name__}"
         )
-        agent = create_deep_agent(
-            model=model,
-            memory=memory_files,
-            skills=skills_path,
-            tools=tools,
-            subagents=subagents_config,
-            backend=backend,
-            # No checkpointer - streaming only, no persistence
-        )
-        logger.info("Deep agent initialized successfully without checkpointing")
-        yield agent
-    elif settings.USE_INMEMORY_SAVER:
-        # Use single global checkpoint for local development
-        logger.info("Using single global checkpoint for local development")
-        checkpoint = get_global_checkpoint()
-
-        agent = create_deep_agent(
-            model=model,
-            memory=memory_files,
-            skills=skills_path,
-            tools=tools,
-            subagents=subagents_config,
-            backend=backend,
-            checkpointer=checkpoint,
-        )
-        logger.info("Deep agent initialized successfully with single global checkpoint")
-        yield agent
     else:
-        # Use PostgreSQL storage for production
-        logger.info("Using PostgreSQL checkpoint for production")
-        async with AsyncPostgresSaver.from_conn_string(
-            settings.database_uri
-        ) as checkpoint:
-            # Setup database connection once
-            if hasattr(checkpoint, "setup"):
-                await checkpoint.setup()
+        logger.info("Using PostgreSQL checkpoint")
+        pg_ctx = AsyncPostgresSaver.from_conn_string(settings.database_uri)
+        checkpointer = await pg_ctx.__aenter__()
+        logger.info(f"PostgreSQL checkpointer ready: {type(checkpointer).__name__}")
+        if hasattr(checkpointer, "setup"):
+            await checkpointer.setup()
 
-            # Create the deep agent with PostgreSQL checkpointer
-            agent = create_deep_agent(
-                model=model,
-                memory=memory_files,
-                skills=skills_path,
-                tools=tools,
-                subagents=subagents_config,
-                backend=backend,
-                checkpointer=checkpoint,
-            )
+    logger.info(
+        f"Creating deep agent with checkpointer={type(checkpointer).__name__ if checkpointer else None} "
+        f"store={type(store).__name__ if store else None}"
+    )
 
-            logger.info(
-                "Deep agent initialized successfully with PostgreSQL checkpoint"
-            )
-            yield agent
+    try:
+        main_agent_tools = [t for t in tools if t.name == "whimsify"]
+        agent = create_deep_agent(
+            model=model,
+            system_prompt=system_prompt,
+            memory=memory_files,
+            skills=skills_path,
+            tools=main_agent_tools,
+            subagents=subagents_config,
+            backend=backend,
+            checkpointer=checkpointer,
+            store=store,
+        )
+        logger.info("Deep agent initialized successfully")
+        yield agent
+    finally:
+        if pg_ctx is not None:
+            await pg_ctx.__aexit__(None, None, None)

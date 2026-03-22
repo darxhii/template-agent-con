@@ -65,9 +65,7 @@ class AgentManager:
         """
         # Use persistent agent for both streaming and state persistence
         # This ensures LangGraph handles state management automatically
-        async with get_template_agent(
-            self.redhat_sso_token, enable_checkpointing=True
-        ) as persistent_agent:
+        async with get_template_agent(self.redhat_sso_token) as persistent_agent:
             try:
                 # Reset tracking for this stream
                 self._current_tool_call_id = None
@@ -473,7 +471,12 @@ class AgentManager:
 
         # Add optional fields only if present
         if chat_message.tool_calls:
-            content["tool_calls"] = chat_message.tool_calls
+            content["tool_calls"] = [
+                {**tc, "name": tc["args"]["subagent_type"]}
+                if tc.get("name") == "task" and "subagent_type" in tc.get("args", {})
+                else tc
+                for tc in chat_message.tool_calls
+            ]
         if chat_message.tool_call_id:
             content["tool_call_id"] = chat_message.tool_call_id
         if chat_message.run_id:

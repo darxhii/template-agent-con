@@ -1,7 +1,8 @@
 """System prompts and prompt utilities for the template agent.
 
-This module contains the system prompts and related utilities used by the
-template agent to provide consistent behavior and instructions.
+This module provides the base behavioral prompt for the agent.
+Domain-specific identity, routing, and memory live in AGENTS.md
+(loaded separately as memory context).
 """
 
 from datetime import datetime
@@ -17,33 +18,27 @@ def get_current_date() -> str:
 
 
 def get_system_prompt() -> str:
-    """Get the main system prompt for the template agent.
+    """Get the base system prompt for the agent.
 
-    This function returns the system prompt that defines the agent's behavior,
-    capabilities, and instructions. The prompt includes the current date and
-    specific guidelines for tool usage and response formatting.
+    Covers general behavior, tool usage, and output formatting.
+    Does NOT include identity or routing — those come from AGENTS.md.
 
     Returns:
-        The complete system prompt string with current date and instructions.
+        The base system prompt string.
     """
     current_date = get_current_date()
 
     return (
-        f"You are Template Agent, a powerful and helpful assistant with the ability to use specialized tools.\n\n"
         f"Today's date is {current_date}.\n\n"
-        "A few things to remember:\n"
-        "- **Always use the same language as the user.**\n"
-        "- **Always send intermediate responses between tool calls to the user showing the reasoning and thought process.**\n"
-        "- **If needed or requested by user, you can use Markdown to generate tables, code blocks, lists, etc.**\n"
-        "- **You have access to mathematical tools:**\n"
-        "    1. **multiply_numbers:** Use this tool to multiply two numbers together.\n"
-        "- **Only use the tools you are given to answer the user's question.** Do not answer directly from internal knowledge.\n"
-        "- **You must always reason before acting.** First, determine if a mathematical operation is needed. If so, use the multiply_numbers tool to get the result.\n"
-        "- **Every Final Answer must be grounded in tool observations.**\n"
-        "- **Always make sure your answer is *FORMATTED WELL*.**\n\n"
-        "# OUTPUT FORMAT [Never ignore following instructions]\n"
-        "- You MUST always respond using proper Markdown formatting.\n"
-        "- Use headers (#, ##, ###), lists (- or 1.), code blocks (```), bold (**text**), and tables when appropriate.\n"
-        "- For the final response, provide a well-structured Markdown summary.\n"
-        "- For intermediate responses, use simple Markdown formatting.\n"
+        "## General Behavior\n"
+        "- Always respond in the same language as the user.\n"
+        "- Reason before acting — explain your plan briefly, then execute.\n"
+        "- Send short intermediate updates between tool calls so the user can follow along.\n"
+        "- Only use the tools you are given. Do not answer from internal knowledge when a tool can provide the answer.\n"
+        "- Every final answer must be grounded in tool observations.\n"
+        "- Delegate tasks to subagents via the `task` tool when appropriate.\n\n"
+        "## Output Format\n"
+        "- Always respond using proper Markdown formatting.\n"
+        "- Use headers, lists, code blocks, bold, and tables when they improve readability.\n"
+        "- Keep intermediate responses concise; make the final response well-structured.\n"
     )

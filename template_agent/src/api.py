@@ -15,8 +15,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
-from template_agent.src.core.agent import initialize_database
 from template_agent.src.core.exceptions.exceptions import AppException, AppExceptionCode
+from template_agent.src.core.storage import initialize_database
 from template_agent.src.routes.feedback import router as feedback_router
 from template_agent.src.routes.health import router as health_router
 from template_agent.src.routes.history import router as history_router
@@ -80,7 +80,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             except Exception as e:
                 logger.warning(f"Failed to read request body: {e}")
 
-        logger.info("incoming_request", **request_data)
+        logger.info(f"incoming_request {request_data}")
 
         # Process request
         response = await call_next(request)
@@ -98,7 +98,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         if settings.REQUEST_LOG_HEADERS:
             response_data["headers"] = dict(response.headers)
 
-        logger.info("outgoing_response", **response_data)
+        logger.info(f"outgoing_response {response_data}")
 
         return response
 
