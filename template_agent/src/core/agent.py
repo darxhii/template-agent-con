@@ -136,7 +136,7 @@ async def get_template_agent(sso_token: str | None = None):
         scopes=["https://www.googleapis.com/auth/cloud-platform"]
     )
     model = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
+        model="gemini-3.1-pro-preview",
         temperature=0,
         credentials=credentials,
         project=project,
