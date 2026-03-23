@@ -359,6 +359,13 @@ class AgentManager:
 
         for message in processed_messages:
             try:
+                if isinstance(message, ToolMessage) and not message.content:
+                    tool_name = getattr(message, "name", "unknown")
+                    tool_id = getattr(message, "tool_call_id", "")
+                    app_logger.warning(
+                        f"Subagent '{tool_name}' returned empty result (tool_call_id={tool_id})"
+                    )
+
                 # Skip empty AI messages from malformed function calls
                 if (
                     isinstance(message, AIMessage)

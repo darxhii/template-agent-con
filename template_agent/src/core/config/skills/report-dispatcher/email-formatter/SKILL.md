@@ -6,7 +6,7 @@ description: Use this skill when formatting and sending wellness reports via ema
 # Email Formatter — Gmail-Compatible HTML
 
 ## When to Use
-When you need to send a wellness report via email. The body MUST be HTML with inline CSS only.
+When you need to send a wellness report via email using `send_email`. The body MUST be HTML with inline CSS only.
 Gmail strips `<style>` blocks and CSS classes, so every element needs inline styles.
 
 ## HTML Template

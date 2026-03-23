@@ -81,6 +81,10 @@ ERROR_ONLY_LOGGERS: Set[str] = ML_AI_LOGGERS | OBSERVABILITY_LOGGERS
 
 _LOGGING_CONFIGURED = False
 
+# Eagerly silence known-noisy loggers before any other code can trigger them
+for _name in SILENT_LOGGERS:
+    logging.getLogger(_name).setLevel(logging.CRITICAL)
+
 
 # --- Internal helpers ---
 
@@ -221,8 +225,10 @@ def get_uvicorn_log_config(log_level: str = "INFO") -> Dict[str, Any]:
             **make_logger_config(uvicorn_loggers, log_level),
             **make_logger_config(access_loggers, log_level),
             **make_logger_config(
-                list(THIRD_PARTY_LOGGERS - ERROR_ONLY_LOGGERS), log_level
+                list(THIRD_PARTY_LOGGERS - ERROR_ONLY_LOGGERS - SILENT_LOGGERS),
+                log_level,
             ),
             **make_logger_config(list(ERROR_ONLY_LOGGERS), "ERROR"),
+            **make_logger_config(list(SILENT_LOGGERS), "CRITICAL"),
         },
     }
