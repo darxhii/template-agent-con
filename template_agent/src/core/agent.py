@@ -10,7 +10,7 @@ from pathlib import Path
 
 import yaml
 from deepagents import SubAgent, create_deep_agent
-from deepagents.backends import FilesystemBackend
+from deepagents.backends import LocalShellBackend
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
@@ -209,7 +209,7 @@ async def get_template_agent(sso_token: str | None = None):
         logger.warning(f"Main agent skills directory not found: {main_skills_dir}")
 
     # Setup backend for deep agent
-    backend = FilesystemBackend(root_dir=str(REPO_ROOT))
+    backend = LocalShellBackend(root_dir=str(REPO_ROOT))
 
     # Resolve checkpointer and store
     checkpointer = None

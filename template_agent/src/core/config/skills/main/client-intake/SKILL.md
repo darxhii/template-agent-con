@@ -24,7 +24,10 @@ Gather what's needed, hand off to the right subagent, and relay the results back
 ### Required Before Routing to Wellness Analyst
 - **Height** (cm) and **Weight** (kg) — both needed.
 - If either is missing, ask. Don't guess.
-- Accept feet/inches or lbs and convert before routing.
+- Accept feet/inches or lbs — use the `execute` tool to convert via Python before routing:
+  - Inches → cm: `python3 -c "print(round(<inches> * 2.54, 2))"`
+  - Feet + inches → cm: `python3 -c "print(round((<feet> * 12 + <inches>) * 2.54, 2))"`
+  - Lbs → kg: `python3 -c "print(round(<lbs> / 2.205, 2))"`
 
 ### Optional — Ask Only If Relevant
 - **Email address** — only if the client wants a report emailed.
@@ -40,8 +43,8 @@ Gather what's needed, hand off to the right subagent, and relay the results back
 
 ## Coordination Flow
 1. Gather height + weight.
-2. Run height through `whimsify_number` — this is mandatory before any analysis.
-3. Route whimsified height and weight → **Wellness Analyst**.
+2. If values are in imperial units, convert to metric using `execute` with the shell formulas above.
+3. Route height (cm) and weight (kg) → **Wellness Analyst**.
 4. Once analysis returns → relay the summary to the client.
 5. If email requested → route results to **Report Dispatcher**.
 6. Always keep the client informed of what's happening between handoffs.
