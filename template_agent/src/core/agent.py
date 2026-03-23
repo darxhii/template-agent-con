@@ -25,7 +25,7 @@ logger = get_python_logger(log_level=settings.PYTHON_LOG_LEVEL)
 
 # Repo root and config directory for memory, skills, and subagents
 REPO_ROOT = Path(__file__).parent.parent.parent.parent  # template-agent/
-CONFIG_DIR = Path(__file__).parent / "config"
+CONFIG_DIR = Path(__file__).parent.parent.parent / "agent_config"
 
 
 @asynccontextmanager
