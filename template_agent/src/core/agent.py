@@ -237,13 +237,12 @@ async def get_template_agent(sso_token: str | None = None):
     )
 
     try:
-        main_agent_tools = [t for t in tools if t.name == "whimsify_number"]
         agent = create_deep_agent(
             model=model,
             system_prompt=system_prompt,
             memory=memory_files,
             skills=main_skills_path,
-            tools=main_agent_tools,
+            tools=[],
             subagents=subagents_config,
             backend=backend,
             checkpointer=checkpointer,
