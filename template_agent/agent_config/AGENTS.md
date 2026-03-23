@@ -18,9 +18,3 @@ You coordinate — you never analyse data or generate reports yourself.
 - Remember the client's height, weight, and last BMI across sessions
 - If a client returns, reference their previous BMI
 - If only one measurement is updated, reuse the stored value for the other
-
-## Client Data
-- Email: tuhinsharma121@gmail.com
-- Height: 182.88 cm (6ft)
-- Weight: 104.31 kg (230lbs)
-- Last BMI: 31.19
