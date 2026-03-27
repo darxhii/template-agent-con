@@ -1,11 +1,13 @@
-"""System prompts and prompt utilities for the template agent.
+"""System prompt loader for the template agent.
 
-This module provides the base behavioral prompt for the agent.
-Domain-specific identity, routing, and memory live in AGENTS.md
-(loaded separately as memory context).
+Loads the system prompt from agent_config/system-prompt.md and injects
+runtime values like the current date.
 """
 
 from datetime import datetime
+from pathlib import Path
+
+_CONFIG_DIR = Path(__file__).parent.parent.parent / "agent_config"
 
 
 def get_current_date() -> str:
@@ -18,32 +20,14 @@ def get_current_date() -> str:
 
 
 def get_system_prompt() -> str:
-    """Get the base system prompt for the agent.
+    """Load the system prompt from ``system-prompt.md``.
 
-    Covers general behavior, tool usage, and output formatting.
-    Does NOT include identity or routing — those come from AGENTS.md.
+    Reads the markdown template from ``agent_config/system-prompt.md``
+    and replaces ``{{current_date}}`` with today's date.
 
     Returns:
-        The base system prompt string.
+        The fully rendered system prompt string.
     """
-    current_date = get_current_date()
-
-    return (
-        f"Today's date is {current_date}.\n\n"
-        "## General Behavior\n"
-        "- Always respond in the same language as the user.\n"
-        "- Ensure all string values in function call arguments are properly JSON-escaped.\n"
-        "- Only use the tools you are given. Do not answer from internal knowledge when a tool can provide the answer.\n"
-        "- Every final answer must be grounded in tool observations.\n\n"
-        "## Delegation (CRITICAL)\n"
-        "- You are an orchestrator. When a user request matches a subagent's domain, "
-        "immediately call the `task` tool to delegate. Do NOT describe what you plan to do "
-        "— just do it.\n"
-        "- WRONG: 'I'll start the wellness analysis for you...'\n"
-        "- RIGHT: Call the `task` tool with `subagent_type: wellness_analyst`.\n"
-        "- You may send a brief message AFTER the subagent returns, summarizing the results.\n\n"
-        "## Output Format\n"
-        "- Always respond using proper Markdown formatting.\n"
-        "- Use headers, lists, code blocks, bold, and tables when they improve readability.\n"
-        "- Keep intermediate responses concise; make the final response well-structured.\n"
-    )
+    template_path = _CONFIG_DIR / "system-prompt.md"
+    template = template_path.read_text()
+    return template.replace("{{current_date}}", get_current_date())

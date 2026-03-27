@@ -20,7 +20,7 @@ class TestPrompt:
         prompt = get_system_prompt()
         assert isinstance(prompt, str)
         assert len(prompt) > 0
-        assert "Template Agent" in prompt
+        assert "Red Hat Fitness Assistant" in prompt
         assert "Today's date is" in prompt
 
     @patch("template_agent.src.core.prompt.get_current_date")
@@ -29,3 +29,15 @@ class TestPrompt:
         mock_get_date.return_value = "December 25, 2024"
         prompt = get_system_prompt()
         assert "Today's date is December 25, 2024" in prompt
+
+    def test_get_system_prompt_contains_routing(self):
+        """Test that system prompt includes routing and delegation rules."""
+        prompt = get_system_prompt()
+        assert "wellness-analyst" in prompt
+        assert "report-dispatcher" in prompt
+        assert "Delegation" in prompt
+
+    def test_get_system_prompt_no_template_vars(self):
+        """Test that no unresolved template variables remain."""
+        prompt = get_system_prompt()
+        assert "{{" not in prompt

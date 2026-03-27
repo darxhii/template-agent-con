@@ -7,6 +7,7 @@ skills, subagents, and memory.
 
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
 
 import yaml
 from deepagents import SubAgent, create_deep_agent
@@ -23,9 +24,34 @@ from template_agent.utils.pylogger import get_python_logger
 
 logger = get_python_logger(log_level=settings.PYTHON_LOG_LEVEL)
 
-# Repo root and config directory for memory, skills, and subagents
 REPO_ROOT = Path(__file__).parent.parent.parent.parent  # template-agent/
 CONFIG_DIR = Path(__file__).parent.parent.parent / "agent_config"
+
+
+def _parse_agent_frontmatter(path: Path) -> dict[str, Any]:
+    r"""Parse a markdown agent file with YAML frontmatter.
+
+    Expects the format: ``--- \\n <yaml> \\n --- \\n <markdown body>``.
+    The markdown body is returned under the ``"body"`` key as the
+    subagent's system prompt.
+
+    Args:
+        path: Path to the ``.md`` agent definition file.
+
+    Returns:
+        A dict of frontmatter fields plus ``body`` (the markdown body).
+    """
+    content = path.read_text()
+    if not content.startswith("---"):
+        return {"body": content.strip()}
+
+    parts = content.split("---", 2)
+    if len(parts) < 3:
+        return {"body": content.strip()}
+
+    frontmatter: dict[str, Any] = yaml.safe_load(parts[1]) or {}
+    frontmatter["body"] = parts[2].strip()
+    return frontmatter
 
 
 @asynccontextmanager
@@ -142,29 +168,32 @@ async def get_template_agent(sso_token: str | None = None):
         project=project,
     )
 
-    # Load subagents from YAML
-    subagents_path = CONFIG_DIR / "subagents.yaml"
-    logger.info(f"Loading subagents from {subagents_path}")
+    # Load subagent definitions from agents/ directory (markdown + frontmatter)
+    agents_dir = CONFIG_DIR / "agents"
+    logger.info(f"Loading subagents from {agents_dir}")
 
     tool_by_name = {t.name: t for t in tools}
-
-    # Skills base directory — each agent has its own subdirectory
     skills_base = CONFIG_DIR / "skills"
-    main_skills_dir = skills_base / "main"
+
+    # Main agent skills — flat directory under skills/
+    main_skills_dir = skills_base / "client-intake"
     main_skills_path = [str(main_skills_dir)] if main_skills_dir.exists() else []
 
     subagents_config: list[SubAgent] | None = None
-    if subagents_path.exists():
-        raw = yaml.safe_load(subagents_path.read_text())
-        entries = raw.get("subagents", []) if isinstance(raw, dict) else []
+    if agents_dir.is_dir():
         subagents_config = []
-        for entry in entries:
+        for agent_file in sorted(agents_dir.glob("*.md")):
+            config = _parse_agent_frontmatter(agent_file)
+            name = config.get("name", agent_file.stem)
+
             sa: SubAgent = SubAgent(
-                name=entry["name"],
-                description=entry.get("description", ""),
-                system_prompt=entry.get("instructions", ""),
+                name=name,
+                description=config.get("description", ""),
+                system_prompt=config.get("body", ""),
             )
-            yaml_tool_names = entry.get("tools", [])
+
+            # Resolve tool names to loaded MCP tools
+            yaml_tool_names = config.get("tools", [])
             if yaml_tool_names:
                 resolved = [
                     tool_by_name[n] for n in yaml_tool_names if n in tool_by_name
@@ -172,36 +201,34 @@ async def get_template_agent(sso_token: str | None = None):
                 missing = [n for n in yaml_tool_names if n not in tool_by_name]
                 if missing:
                     logger.warning(
-                        f"Subagent '{entry['name']}' references unknown tools: {missing}"
+                        f"Subagent '{name}' references unknown tools: {missing}"
                     )
                 sa["tools"] = resolved
-            sa_skills_name = entry.get("skills_dir")
-            if sa_skills_name:
-                sa_skills_dir = skills_base / sa_skills_name
-                if sa_skills_dir.exists():
-                    sa["skills"] = [str(sa_skills_dir)]
-                    logger.info(f"Subagent '{entry['name']}' skills: {sa_skills_dir}")
-                else:
-                    logger.warning(
-                        f"Subagent '{entry['name']}' skills_dir not found: {sa_skills_dir}"
-                    )
+
+            # Resolve skill names to paths under skills/
+            skill_names = config.get("skills", [])
+            if skill_names:
+                skill_paths: list[str] = []
+                for skill_name in skill_names:
+                    skill_dir = skills_base / skill_name
+                    if skill_dir.exists():
+                        skill_paths.append(str(skill_dir))
+                        logger.info(f"Subagent '{name}' skill loaded: {skill_dir}")
+                    else:
+                        logger.warning(
+                            f"Subagent '{name}' skill not found: {skill_dir}"
+                        )
+                if skill_paths:
+                    sa["skills"] = skill_paths
+
             subagents_config.append(sa)
         logger.info(f"Loaded {len(subagents_config)} subagents")
     else:
-        logger.warning(f"Subagents file not found at {subagents_path}")
+        logger.warning(f"Agents directory not found at {agents_dir}")
 
-    # Load system prompt
+    # Load system prompt (identity + routing + behavior from system-prompt.md)
     system_prompt = get_system_prompt()
-    logger.info("Loaded system prompt from prompt.py")
-
-    # Setup memory (AGENTS.md)
-    memory_files = []
-    agents_md_path = CONFIG_DIR / "AGENTS.md"
-    if agents_md_path.exists():
-        memory_files.append(str(agents_md_path))
-        logger.info(f"Loaded memory from {agents_md_path}")
-    else:
-        logger.warning(f"AGENTS.md not found at {agents_md_path}")
+    logger.info("Loaded system prompt from agent_config/system-prompt.md")
 
     if main_skills_path:
         logger.info(f"Main agent skills: {main_skills_dir}")
@@ -240,7 +267,6 @@ async def get_template_agent(sso_token: str | None = None):
         agent = create_deep_agent(
             model=model,
             system_prompt=system_prompt,
-            memory=memory_files,
             skills=main_skills_path,
             tools=[],
             subagents=subagents_config,
