@@ -7,6 +7,9 @@ description: >
 
 # Wellness Report Content
 
+Reference for BMI classification, report structure, and tone when generating
+a wellness summary. Use this to produce consistent, category-specific reports.
+
 ## BMI Categories
 
 | Range | Category |

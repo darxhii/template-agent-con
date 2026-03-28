@@ -11,11 +11,11 @@ from typing import Any
 
 import yaml
 from deepagents import SubAgent, create_deep_agent
-from deepagents.backends import LocalShellBackend
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
+from template_agent.src.core.backend import get_backend
 from template_agent.src.core.exceptions.exceptions import AppException, AppExceptionCode
 from template_agent.src.core.prompt import get_system_prompt
 from template_agent.src.core.storage import get_global_checkpoint, get_global_store
@@ -235,8 +235,7 @@ async def get_template_agent(sso_token: str | None = None):
     else:
         logger.warning(f"Main agent skills directory not found: {main_skills_dir}")
 
-    # Setup backend for deep agent
-    backend = LocalShellBackend(root_dir=str(REPO_ROOT))
+    backend = get_backend(REPO_ROOT, pyproject=CONFIG_DIR / "pyproject.toml")
 
     # Resolve checkpointer and store
     checkpointer = None
