@@ -48,7 +48,6 @@ plan, prescribe, or track anything over time.
 
 ## Out of Scope
 
-- Multi-week or multi-month plans (weight loss timelines, progressive targets).
 - Diet plans, meal plans, or food recommendations.
 - Exercise or workout routines.
 - Weight history, trends, or progress tracking.
