@@ -2,15 +2,15 @@
 name: email-formatter
 description: >
   Provides Gmail-compatible HTML template and inline CSS rules for formatting
-  wellness report emails. Use when formatting and sending wellness reports
-  via email with send_email.
+  fitness report emails. Use when formatting and sending reports via email
+  with send_email.
 ---
 
 # Email Formatter — Gmail-Compatible HTML
 
 ## When to Use
 
-When sending a wellness report via `send_email`. The body **must** be HTML
+When sending a fitness report via `send_email`. The body **must** be HTML
 with inline CSS only — Gmail strips `<style>` blocks and CSS classes.
 
 ## Formatting Rules
@@ -41,10 +41,7 @@ was not provided — never leave an empty section or placeholder.**
 | Section | When to include | Content |
 |---------|----------------|---------|
 | BMI Result | BMI value + category provided | Value, category, one-line interpretation in a highlight box |
-| Daily Targets | Water and/or calorie targets provided | Water intake and calorie targets |
 | Health Tips | Tips list provided | Actionable tips as a bullet list |
-| Workout Plan | Workout plan provided | Weekly overview, exercises, sets/reps |
-| Diet Plan | Diet plan provided | Calorie target, macros, sample meals |
 
 This list is not exhaustive — if the input contains additional named sections
 not listed above, render them using the same styling conventions (heading +
@@ -56,7 +53,7 @@ content + divider).
 <div style="max-width:600px;margin:0 auto;font-family:Arial,Helvetica,sans-serif;color:#333;">
   <!-- Header (always) -->
   <div style="background-color:#CC0000;color:white;padding:20px;text-align:center;">
-    <h1 style="margin:0;font-size:22px;">Red Hat Wellness Report</h1>
+    <h1 style="margin:0;font-size:22px;">Red Hat Fitness Report</h1>
   </div>
 
   <div style="padding:20px;">

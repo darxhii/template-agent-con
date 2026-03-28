@@ -1,14 +1,14 @@
 ---
-name: wellness-report
+name: bmi-report
 description: >
-  Defines BMI categories, report structure, and tone guidelines for wellness
-  summaries. Use when generating a wellness analysis report for a user.
+  Defines BMI categories, report structure, and tone guidelines for BMI
+  analysis reports. Use when generating a BMI report for a user.
 ---
 
-# Wellness Report Content
+# BMI Report Content
 
 Reference for BMI classification, report structure, and tone when generating
-a wellness summary. Use this to produce consistent, category-specific reports.
+a BMI analysis. Use this to produce consistent, category-specific reports.
 
 ## BMI Categories
 
@@ -22,9 +22,8 @@ a wellness summary. Use this to produce consistent, category-specific reports.
 ## Report Structure
 
 1. **BMI Result** — value + category + one-line interpretation
-2. **Daily Targets** — water intake (liters), base calories (kcal)
-3. **Health Tips** — actionable tips relevant to the BMI category
-4. **Disclaimer** — "This is not medical advice. Consult a healthcare professional."
+2. **Health Tips** — actionable tips relevant to the BMI category
+3. **Disclaimer** — "This is not medical advice. Consult a healthcare professional."
 
 ## Tone
 
