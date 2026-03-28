@@ -86,7 +86,8 @@ async def get_template_agent(sso_token: str | None = None):
 
         # Add timeout wrapper for MCP connection
         async def connect_with_timeout():
-            # Configure MCP client with SSL verification setting
+            import httpx
+
             server_config: dict = {
                 "url": settings.MCP_SERVER_URL,
                 "transport": settings.MCP_TRANSPORT_PROTOCOL,
@@ -95,11 +96,12 @@ async def get_template_agent(sso_token: str | None = None):
                 else {},
             }
 
-            # Add SSL verification setting (verify=False disables cert verification)
             if not settings.MCP_SSL_VERIFY:
-                server_config["verify"] = False
                 logger.warning(
                     "SSL certificate verification disabled for MCP connection"
+                )
+                server_config["httpx_client_factory"] = (
+                    lambda **kwargs: httpx.AsyncClient(verify=False, **kwargs)  # nosec B501
                 )
 
             client = MultiServerMCPClient({settings.MCP_SERVER_NAME: server_config})
