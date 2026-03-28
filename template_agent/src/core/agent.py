@@ -24,7 +24,6 @@ from template_agent.utils.pylogger import get_python_logger
 
 logger = get_python_logger(log_level=settings.PYTHON_LOG_LEVEL)
 
-REPO_ROOT = Path(__file__).parent.parent.parent.parent  # template-agent/
 CONFIG_DIR = Path(__file__).parent.parent.parent / "agent_config"
 
 
@@ -235,7 +234,7 @@ async def get_template_agent(sso_token: str | None = None):
     else:
         logger.warning(f"Main agent skills directory not found: {main_skills_dir}")
 
-    backend = get_backend(REPO_ROOT, pyproject=CONFIG_DIR / "pyproject.toml")
+    backend = get_backend()
 
     # Resolve checkpointer and store
     checkpointer = None

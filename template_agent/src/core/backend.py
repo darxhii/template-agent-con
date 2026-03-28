@@ -91,6 +91,9 @@ def _build_env(venv_dir: Path, extra: dict[str, str] | None = None) -> dict[str,
     return env
 
 
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+_CONFIG_DIR = Path(__file__).resolve().parent.parent.parent / "agent_config"
+
 _backend: LocalShellBackend | None = None
 
 
@@ -128,8 +131,8 @@ def create_backend(
 
 
 def get_backend(
-    root_dir: Path,
-    pyproject: Path,
+    root_dir: Path | None = None,
+    pyproject: Path | None = None,
     *,
     timeout: int = 120,
     max_output_bytes: int = 100_000,
@@ -138,14 +141,27 @@ def get_backend(
     """Return the singleton backend, creating it on the first call.
 
     Subsequent calls return the same instance regardless of arguments.
+    When *root_dir* or *pyproject* are ``None`` the module-level defaults
+    (``_REPO_ROOT`` / ``_CONFIG_DIR``) are used.
     """
     global _backend  # noqa: PLW0603
     if _backend is None:
         _backend = create_backend(
-            root_dir,
-            pyproject,
+            root_dir or _REPO_ROOT,
+            pyproject or (_CONFIG_DIR / "pyproject.toml"),
             timeout=timeout,
             max_output_bytes=max_output_bytes,
             extra_env=extra_env,
         )
     return _backend
+
+
+def initialize_backend() -> LocalShellBackend:
+    """Pre-initialize the singleton backend at server startup.
+
+    Calling this early avoids the venv-creation penalty on the first request.
+    """
+    logger.info("Pre-initializing backend (venv + dependency install)")
+    backend = get_backend()
+    logger.info("Backend initialization complete")
+    return backend
