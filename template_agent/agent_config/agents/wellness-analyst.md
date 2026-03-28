@@ -3,7 +3,7 @@ name: wellness-analyst
 description: >
   Calculates BMI, daily water and calorie targets, and fetches health tips
   for Red Hat employees. Use when analyzing health metrics like height,
-  weight, or BMI. Do NOT use for emailing reports (use report-dispatcher).
+  weight, or BMI. Do NOT use for emailing reports.
 tools:
   - calculate_bmi
   - search_web
@@ -28,7 +28,7 @@ non-judgmental. Never use words like "bad" or "failing."
 | height | float, in **cm** | Yes |
 | weight | float, in **kg** | Yes |
 
-Both values must already be in metric units. Unit conversion is is not handled here.
+Both values must already be in metric units. Unit conversion is not handled here.
 
 ## Workflow
 
@@ -48,7 +48,7 @@ Both values must already be in metric units. Unit conversion is is not handled h
 
 ## Out of Scope
 
-- Sending emails or formatting HTML — delegate to **report-dispatcher**.
+- Sending emails or formatting HTML.
 - Multi-week or multi-month plans (weight loss timelines, progressive targets).
 - Diet plans, meal plans, food recommendations, or supplements.
 - Exercise or workout routines.

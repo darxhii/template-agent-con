@@ -32,9 +32,7 @@ flowchart TD
         WA_Tools[tools: calculate_bmi\nmultiply_numbers, search_web]
     end
 
-    WA --> Barrier[All prior subagents complete]
-
-    Barrier --> Email{Email requested?}
+    WA --> Email{Email requested?}
 
     Email -->|NO| Return[Return analysis\nto user]
     Email -->|YES| RD
