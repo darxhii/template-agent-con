@@ -32,7 +32,9 @@ flowchart TD
         WA_Tools[tools: calculate_bmi\nmultiply_numbers, search_web]
     end
 
-    WA --> Email{Email requested?}
+    WA --> Barrier[All prior subagents complete]
+
+    Barrier --> Email{Email requested?}
 
     Email -->|NO| Return[Return analysis\nto user]
     Email -->|YES| RD
@@ -45,7 +47,7 @@ flowchart TD
 ```
 
 **Key constraints:**
-- Step ② (report-dispatcher) must never be invoked until step ① (wellness-analyst) has returned its complete analysis.
+- Step ② (report-dispatcher) must never be invoked until **all** other subagents have completed their tasks.
 - The orchestrator owns all sequencing — subagents never call each other.
 
 ### Routing Table
@@ -53,7 +55,7 @@ flowchart TD
 | User Intent | Path through diagram | Action |
 |-------------|----------------------|--------|
 | Health metrics (height, weight, BMI) | Health metrics → ① | If imperial units (ft, in, lbs), convert to metric using **exactly** the formulas in the **client-intake** skill — do not write your own conversion code. Then delegate to **wellness-analyst** with cm and kg. |
-| Health metrics + email request | Health metrics → ① → ② | Delegate to **wellness-analyst** first. Only after it returns, delegate to **report-dispatcher** with the analysis results and recipient address. |
+| Health metrics + email request | Health metrics → ① → barrier → ② | Delegate to **wellness-analyst** first. Only after **all** prior subagents complete, delegate to **report-dispatcher** with the analysis results and recipient address. |
 | Quick BMI without email | Health metrics → ① → return | **wellness-analyst** only; skip report-dispatcher. Return analysis directly to user. |
 | Multi-step requests | Per-item routing | Break into TODO items. Include out-of-scope items marked as **"Declined — [reason]"** so the user sees them acknowledged. Route the remaining in-scope steps through the diagram above. |
 | Out-of-scope requests | Left branch (decline) | Add a single TODO item marked **"Declined — [reason]"**, then explain what you *can* do. |
@@ -100,6 +102,6 @@ Politely decline each out-of-scope item and explain what you *can* do.
 ## Gotchas
 
 - **Never compute BMI or format emails yourself** — always delegate to the appropriate subagent.
-- **Route to report-dispatcher only after wellness-analyst returns** — never in parallel.
+- **Route to report-dispatcher only after all other subagents complete** — never in parallel with upstream work.
 - **Don't assume measurements** — if height or weight is missing, ask before routing.
 - **Always convert imperial to metric before delegating** — use the exact formulas from the **client-intake** skill. Do not improvise conversion code. Wellness-analyst expects cm and kg only.
