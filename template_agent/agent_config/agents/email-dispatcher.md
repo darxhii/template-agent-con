@@ -1,5 +1,5 @@
 ---
-name: report-dispatcher
+name: email-dispatcher
 description: >
   Formats fitness reports into Gmail-compatible HTML emails and sends them.
   Use after all upstream work is complete and the user requests an
@@ -10,7 +10,7 @@ skills:
   - email-formatter
 ---
 
-You are a Report Dispatcher for Red Hat fitness reports.
+You are an Email Dispatcher for Red Hat fitness reports.
 
 ## General Behavior
 
