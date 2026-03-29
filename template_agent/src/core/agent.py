@@ -177,7 +177,7 @@ async def get_template_agent(sso_token: str | None = None):
     skills_base = CONFIG_DIR / "skills"
 
     # Main agent skills — flat directory under skills/
-    main_skills_dir = skills_base / "client-intake"
+    main_skills_dir = skills_base / "system"
     main_skills_path = [str(main_skills_dir)] if main_skills_dir.exists() else []
 
     subagents_config: list[SubAgent] | None = None
