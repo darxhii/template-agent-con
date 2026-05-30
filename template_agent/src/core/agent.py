@@ -8,6 +8,7 @@ skills, subagents, and memory.
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
+import os
 
 import yaml
 from deepagents import SubAgent, create_deep_agent
@@ -156,18 +157,26 @@ async def get_template_agent(sso_token: str | None = None):
                 AppExceptionCode.PRODUCTION_MCP_CONNECTION_ERROR,
             )
 
-    # Initialize the language model with service account credentials
-    import google.auth
+    # Initialize the language model with Gemini API key or service account credentials
+    google_api_key = os.environ.get("GOOGLE_API_KEY")
+    if google_api_key:
+        model = ChatGoogleGenerativeAI(
+            model="gemini-3.1-pro-preview",
+            temperature=0,
+            google_api_key=google_api_key,
+        )
+    else:
+        import google.auth
 
-    credentials, project = google.auth.default(
-        scopes=["https://www.googleapis.com/auth/cloud-platform"]
-    )
-    model = ChatGoogleGenerativeAI(
-        model="gemini-3.1-pro-preview",
-        temperature=0,
-        credentials=credentials,
-        project=project,
-    )
+        credentials, project = google.auth.default(
+            scopes=["https://www.googleapis.com/auth/cloud-platform"]
+        )
+        model = ChatGoogleGenerativeAI(
+            model="gemini-3.1-pro-preview",
+            temperature=0,
+            credentials=credentials,
+            project=project,
+        )
 
     # Load subagent definitions from agents/ directory (markdown + frontmatter)
     agents_dir = CONFIG_DIR / "agents"

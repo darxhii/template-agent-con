@@ -2,8 +2,9 @@
 name: email-dispatcher
 description: >
   Formats fitness reports into Gmail-compatible HTML emails and sends them.
-  Use after all upstream work is complete and the user requests an
-  emailed report. Do NOT use for analysis.
+  Use after bmi-analyst when the user requests an emailed fitness report.
+  Do NOT use for topic/news research — use newsletter-publisher instead.
+  Do NOT use for analysis.
 tools:
   - send_email
 skills:
